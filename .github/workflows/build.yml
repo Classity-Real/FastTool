@@ -25,7 +25,6 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
-          # Explicitly avoid the removed "tools" package
           packages: 'platform-tools'
 
       - name: Accept Android licenses
@@ -34,6 +33,15 @@ jobs:
       - name: Install required SDK packages
         run: |
           sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Download arm64 fastboot binary
+        run: |
+          mkdir -p app/src/main/assets
+          curl -fsSL -o app/src/main/assets/fastboot \
+            "https://github.com/rendiix/termux-adb-fastboot/raw/master/binary/arm64-v8a/bin/fastboot"
+          chmod +x app/src/main/assets/fastboot
+          ls -la app/src/main/assets/fastboot
+          file app/src/main/assets/fastboot || true
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4

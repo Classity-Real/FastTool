@@ -6,54 +6,41 @@ Native Android app for flashing devices over OTG using real fastboot.
 
 ## Features
 
-- Live USB host detection (attach / detach / permission)
+- Live USB host detection
 - Flash templates:
   - **Boot + Userdata**
   - **Boot + Userdata + Cache**
-- Select images per partition → Flash
-- Bundled `fastboot` binary runner (extract + exec)
-- Terminal UI matching the original concept
+- Bundled arm64 `fastboot` binary (auto-downloaded in CI)
+- Terminal UI from the original concept
 
-## Fastboot binary (required)
+## Fastboot binary
 
-The app expects a static fastboot binary in assets:
+Source used by CI:
 
-```
-app/src/main/assets/fastboot
-```
+https://github.com/rendiix/termux-adb-fastboot/blob/master/binary/arm64-v8a/bin/fastboot
 
-Arm64 is recommended. You can also name it `fastboot-arm64-v8a`.
+**Local build:**
 
-On first use it is extracted to the app private directory and executed as:
-
-```text
-fastboot flash <partition> <image>
+```bash
+chmod +x scripts/fetch-fastboot.sh
+./scripts/fetch-fastboot.sh
+./gradlew assembleDebug
 ```
 
-Get a binary from Android platform-tools or an AOSP build of `system/core/fastboot`.
+**CI:** downloads the binary into `app/src/main/assets/fastboot` before building.
 
 ## Build
 
 ```bash
+./scripts/fetch-fastboot.sh   # once
 ./gradlew assembleDebug
 ```
 
-Or use the GitHub Actions workflow — it uploads the APK as **FastTool-debug**.
+Or push to `main` and download the **FastTool-debug** artifact from Actions.
 
 ## Package
 
 `dev.fasttool`
-
-## Status
-
-| Piece | State |
-|-------|--------|
-| UI | Done |
-| Templates | Done |
-| USB detection | Done |
-| fastboot exec path | Done |
-| Bundled binary | **You must add `assets/fastboot`** |
-| Full protocol over USB bulk | Optional alternative later |
 
 ---
 
