@@ -47,7 +47,6 @@ fun TemplatesSheet(
     var selected by remember { mutableStateOf<FlashTemplate?>(null) }
     val imageUris = remember { mutableStateMapOf<String, Uri>() }
 
-    // Single launcher — which partition is being picked is tracked in state
     var pickingPartition by remember { mutableStateOf<String?>(null) }
     val picker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
@@ -76,7 +75,7 @@ fun TemplatesSheet(
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFFECECEC)
             )
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier = Modifier.height(6.dp))
             Text(
                 text = if (selected == null)
                     "Choose a flash profile"
@@ -86,7 +85,7 @@ fun TemplatesSheet(
                 color = Color(0xFF767676)
             )
 
-            Spacer(Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
             if (selected == null) {
                 TEMPLATES.forEach { template ->
@@ -97,7 +96,7 @@ fun TemplatesSheet(
                             imageUris.clear()
                         }
                     )
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
                 }
             } else {
                 selected!!.partitions.forEach { partition ->
@@ -139,10 +138,10 @@ fun TemplatesSheet(
                             }
                         }
                     }
-                    Spacer(modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
                 }
 
-                Spacer(Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
                 val allSelected = selected!!.partitions.all { imageUris.containsKey(it) }
 
@@ -168,7 +167,7 @@ fun TemplatesSheet(
                     Text("Flash", fontWeight = FontWeight.SemiBold)
                 }
 
-                Spacer(Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
                 TextButton(
                     onClick = { selected = null },
@@ -199,13 +198,13 @@ private fun TemplateCard(
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 15.sp
             )
-            Spacer(Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = template.description,
                 color = Color(0xFF767676),
                 fontSize = 12.sp
             )
-            Spacer(Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = template.partitions.joinToString(" · "),
                 color = Color(0xFF4ADE80),
