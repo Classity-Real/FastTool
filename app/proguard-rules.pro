@@ -1,0 +1,1 @@
+# FastTool proguard rules
