@@ -3,13 +3,10 @@ package dev.fasttool.ui
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,7 +20,7 @@ data class FlashTemplate(
     val id: String,
     val title: String,
     val description: String,
-    val partitions: List<String> // e.g. ["boot", "userdata"]
+    val partitions: List<String>
 )
 
 val TEMPLATES = listOf(
@@ -50,13 +47,17 @@ fun TemplatesSheet(
     var selected by remember { mutableStateOf<FlashTemplate?>(null) }
     val imageUris = remember { mutableStateMapOf<String, Uri>() }
 
-    val pickers = selected?.partitions?.associateWith { partition ->
-        rememberLauncherForActivityResult(
-            contract = ActivityResultContracts.OpenDocument()
-        ) { uri ->
-            if (uri != null) imageUris[partition] = uri
+    // Single launcher — which partition is being picked is tracked in state
+    var pickingPartition by remember { mutableStateOf<String?>(null) }
+    val picker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        val part = pickingPartition
+        if (uri != null && part != null) {
+            imageUris[part] = uri
         }
-    } ?: emptyMap()
+        pickingPartition = null
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -103,7 +104,8 @@ fun TemplatesSheet(
                     val uri = imageUris[partition]
                     Surface(
                         onClick = {
-                            pickers[partition]?.launch(arrayOf("*/*"))
+                            pickingPartition = partition
+                            picker.launch(arrayOf("*/*"))
                         },
                         shape = RoundedCornerShape(16.dp),
                         color = Color(0xFF222222),
@@ -137,7 +139,7 @@ fun TemplatesSheet(
                             }
                         }
                     }
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(modifier.height(10.dp))
                 }
 
                 Spacer(Modifier.height(12.dp))
