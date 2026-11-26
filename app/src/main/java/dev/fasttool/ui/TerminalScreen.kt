@@ -94,68 +94,87 @@ fun TerminalScreen() {
 
         val parts = cmdLine.split(Regex("\\s+"))
         val cmd = parts[0].lowercase()
+        val args = parts.drop(1)
 
         scope.launch {
-            when (cmd) {
-                "help" -> {
-                    append("FastTool — available commands", LineType.System)
+            when {
+                cmd == "help" -> {
+                    append("FastTool commands:", LineType.System)
+                    append("  help")
+                    append("  status")
+                    append("  devices")
+                    append("  clear")
+                    append("  version")
+                    append("  fastboot <args>   run real fastboot")
                     append("")
-                    append("  help          Show this help")
-                    append("  status        Show host / device status")
-                    append("  devices       List connected USB / fastboot devices")
-                    append("  clear         Clear the terminal")
-                    append("  version       Show FastTool version")
+                    append("Examples:", LineType.System)
+                    append("  fastboot devices")
+                    append("  fastboot getvar product")
+                    append("  fastboot reboot")
+                    append("  fastboot flash boot boot.img")
                     append("")
-                    append("Use the download button for flash templates.", LineType.System)
+                    append("Or use Templates (download button).", LineType.System)
                 }
-                "status" -> {
+                cmd == "status" -> {
                     append("Host status", LineType.System)
                     when (val s = hostState) {
                         is HostState.NoDevice -> {
-                            append("  State         no device")
-                            append("  Hint          Connect a device in fastboot mode over OTG")
+                            append("  State  no device")
+                            append("  Hint   connect device in fastboot over OTG")
                         }
-                        is HostState.PermissionNeeded -> {
-                            append("  State         waiting for USB permission")
-                        }
+                        is HostState.PermissionNeeded -> append("  State  waiting for USB permission")
                         is HostState.Ready -> {
-                            append("  State         ready")
-                            append("  Device        ${s.device.product ?: s.device.deviceName}")
-                            append("  VID:PID       ${s.device.vendorId.toString(16)}:${s.device.productId.toString(16)}")
+                            append("  State  ready")
+                            append("  Device ${s.device.product ?: s.device.deviceName}")
+                            append("  ID     ${s.device.vendorId.toString(16)}:${s.device.productId.toString(16)}")
                         }
-                        is HostState.Busy -> append("  State         busy — ${s.message}")
-                        is HostState.Error -> append("  State         error — ${s.message}")
+                        is HostState.Busy -> append("  State  busy — ${s.message}")
+                        is HostState.Error -> append("  State  error — ${s.message}")
                     }
                 }
-                "devices" -> {
-                    append("Scanning…", LineType.System)
-                    usbManager.scanConnectedDevices()
-                    delay(200)
-                    val fb = usbManager.devices()
-                    fb.onSuccess { out ->
-                        append("fastboot devices:", LineType.System)
+                cmd == "devices" || (cmd == "fastboot" && args.firstOrNull() == "devices") -> {
+                    val result = usbManager.runFastboot("devices")
+                    result.onSuccess { out ->
                         out.lines().forEach { append(it) }
+                        if (out.isBlank()) append("(no devices)")
                     }.onFailure {
-                        append("fastboot devices failed: ${it.message}", LineType.Error)
-                    }
-                    when (val s = hostState) {
-                        is HostState.Ready -> {
-                            append("USB device: ${s.device.product ?: s.device.deviceName}", LineType.Success)
-                        }
-                        else -> {}
+                        append(it.message ?: "failed", LineType.Error)
                     }
                 }
-                "clear" -> {
+                cmd == "clear" -> {
                     lines = listOf(TerminalLine("Session cleared", LineType.System))
                 }
-                "version" -> {
+                cmd == "version" -> {
                     append("FastTool 0.1.0")
-                    append("Android · Fastboot tool")
                     append("https://github.com/Classity-Real/FastTool")
+                }
+                cmd == "fastboot" -> {
+                    // Pass everything after "fastboot" to the real binary
+                    val result = usbManager.runFastboot(*args.toTypedArray())
+                    result.onSuccess { out ->
+                        out.lines().forEach { line ->
+                            if (line.isNotBlank()) append(line)
+                        }
+                        if (out.isBlank()) append("OK", LineType.Success)
+                    }.onFailure {
+                        append(it.message ?: "fastboot failed", LineType.Error)
+                    }
+                }
+                // Common fastboot subcommands without typing "fastboot" prefix
+                cmd in listOf("getvar", "reboot", "flash", "erase", "oem", "continue", "boot") -> {
+                    val result = usbManager.runFastboot(cmd, *args.toTypedArray())
+                    result.onSuccess { out ->
+                        out.lines().forEach { line ->
+                            if (line.isNotBlank()) append(line)
+                        }
+                        if (out.isBlank()) append("OK", LineType.Success)
+                    }.onFailure {
+                        append(it.message ?: "failed", LineType.Error)
+                    }
                 }
                 else -> {
                     append("Unknown command: $cmd", LineType.Error)
-                    append("Type \"help\" or open Templates.", LineType.System)
+                    append("Type help or: fastboot devices", LineType.System)
                 }
             }
             listState.animateScrollToItem(lines.lastIndex.coerceAtLeast(0))
@@ -382,7 +401,7 @@ fun TerminalScreen() {
     LaunchedEffect(Unit) {
         delay(1200)
         if (lines.size == 1) {
-            append("Type \"help\" or open Templates (top right).", LineType.System)
+            append("Try: fastboot devices", LineType.System)
         }
     }
 }

@@ -165,6 +165,26 @@ class UsbFastbootManager(private val context: Context) {
         scanConnectedDevices()
     }
 
+    /** Run arbitrary fastboot args, e.g. devices / getvar all / reboot */
+    suspend fun runFastboot(vararg args: String): Result<String> {
+        return try {
+            setBusy(args.joinToString(" ").ifBlank { "fastboot" })
+            val result = runner.run(*args)
+            val out = listOf(result.stdout, result.stderr)
+                .filter { it.isNotBlank() }
+                .joinToString("\n")
+            if (result.exitCode == 0) {
+                Result.success(out.ifBlank { "OK" })
+            } else {
+                Result.failure(RuntimeException(out.ifBlank { "exit ${result.exitCode}" }))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        } finally {
+            setReadyFromCurrent()
+        }
+    }
+
     suspend fun flash(partition: String, imageUri: Uri): Result<String> {
         return try {
             setBusy("Flashing $partition…")
@@ -183,29 +203,9 @@ class UsbFastbootManager(private val context: Context) {
         }
     }
 
-    suspend fun devices(): Result<String> {
-        return try {
-            val result = runner.devices()
-            if (result.exitCode == 0) {
-                Result.success(result.stdout.ifBlank { "(no devices)" })
-            } else {
-                Result.failure(RuntimeException(result.stderr.ifBlank { "fastboot devices failed" }))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    suspend fun devices(): Result<String> = runFastboot("devices")
 
-    suspend fun reboot(): Result<String> {
-        return try {
-            setBusy("Rebooting…")
-            val result = runner.reboot()
-            if (result.exitCode == 0) Result.success("Rebooting")
-            else Result.failure(RuntimeException(result.stderr))
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    suspend fun reboot(): Result<String> = runFastboot("reboot")
 }
 
 private fun UsbDevice.looksLikeFastboot(): Boolean {
