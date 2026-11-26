@@ -11,99 +11,57 @@ import java.io.File
 import java.io.FileOutputStream
 
 /**
- * Runs the bundled fastboot binary.
+ * Runs the bundled fastboot binary shipped as jniLibs/arm64-v8a/libfastboot.so
  *
- * Preferred locations (in order):
- * 1. nativeLibraryDir/libfastboot.so  (from jniLibs — always executable)
- * 2. Extracted copy in codeCacheDir with chmod 755
- * 3. Extracted copy in filesDir with chmod 755
+ * Modern Android often blocks exec from app data dirs (error 13).
+ * Strategy:
+ * 1. Use extracted nativeLibraryDir/libfastboot.so (legacy packaging)
+ * 2. Fall back to running via /system/bin/linker64
  */
 class FastbootRunner(private val context: Context) {
 
     private val tag = "FastbootRunner"
 
     suspend fun ensureBinary(): File = withContext(Dispatchers.IO) {
-        // 1) System-installed native lib path (best)
         val nativeDir = context.applicationInfo.nativeLibraryDir
         if (nativeDir != null) {
-            val fromJni = File(nativeDir, "libfastboot.so")
-            if (fromJni.exists() && fromJni.canExecute()) {
-                Log.i(tag, "Using jniLibs binary: ${fromJni.absolutePath}")
-                return@withContext fromJni
+            val so = File(nativeDir, "libfastboot.so")
+            if (so.exists() && so.length() > 0) {
+                Log.i(tag, "Found native lib: ${so.absolutePath} size=${so.length()}")
+                return@withContext so
             }
-            // Also try plain name if someone put it there
-            val plain = File(nativeDir, "fastboot")
-            if (plain.exists() && plain.canExecute()) {
-                return@withContext plain
-            }
+            Log.w(tag, "nativeLibraryDir has no libfastboot.so: $nativeDir contents=${File(nativeDir).list()?.joinToString()}")
         }
 
-        // 2) Extract from assets into codeCacheDir (often executable)
-        val cacheBin = File(context.codeCacheDir, "fastboot")
-        extractAssetIfNeeded(cacheBin)
-        if (tryMakeExecutable(cacheBin)) {
-            return@withContext cacheBin
-        }
-
-        // 3) filesDir fallback
-        val filesBin = File(context.filesDir, "fastboot")
-        extractAssetIfNeeded(filesBin)
-        if (tryMakeExecutable(filesBin)) {
-            return@withContext filesBin
+        // Last resort: extract asset into codeCache and hope
+        val dest = File(context.codeCacheDir, "libfastboot.so")
+        extractFromAssets(dest)
+        if (dest.exists() && dest.length() > 0) {
+            try {
+                Os.chmod(dest.absolutePath, 493) // 0755
+            } catch (_: Exception) {
+            }
+            dest.setExecutable(true, false)
+            return@withContext dest
         }
 
         throw IllegalStateException(
-            "Cannot execute fastboot binary (Permission denied). " +
-            "Rebuild with jniLibs arm64-v8a/libfastboot.so."
+            "libfastboot.so not found. Rebuild APK with jniLibs + useLegacyPackaging."
         )
     }
 
-    private fun extractAssetIfNeeded(dest: File) {
+    private fun extractFromAssets(dest: File) {
         if (dest.exists() && dest.length() > 0) return
-
-        val abi = Build.SUPPORTED_ABIS.firstOrNull() ?: "arm64-v8a"
-        val names = listOf(
-            "libfastboot.so",
-            "fastboot",
-            "fastboot-$abi",
-            "fastboot-arm64-v8a"
-        )
+        val names = listOf("libfastboot.so", "fastboot", "fastboot-arm64-v8a")
         for (name in names) {
             try {
                 context.assets.open(name).use { input ->
                     FileOutputStream(dest).use { output -> input.copyTo(output) }
                 }
-                Log.i(tag, "Extracted asset $name → ${dest.absolutePath}")
+                Log.i(tag, "Extracted $name → ${dest.absolutePath}")
                 return
             } catch (_: Exception) {
             }
-        }
-        // Also try copying from nativeLibraryDir if present but not executable flag
-        val nativeDir = context.applicationInfo.nativeLibraryDir
-        if (nativeDir != null) {
-            val src = File(nativeDir, "libfastboot.so")
-            if (src.exists()) {
-                src.copyTo(dest, overwrite = true)
-            }
-        }
-    }
-
-    private fun tryMakeExecutable(file: File): Boolean {
-        if (!file.exists() || file.length() == 0L) return false
-        try {
-            file.setReadable(true, false)
-            file.setExecutable(true, false)
-            file.setWritable(true, true)
-            try {
-                Os.chmod(file.absolutePath, 493) // 0755
-            } catch (_: Exception) {
-            }
-            if (file.canExecute()) return true
-            // Probe by trying to run --help briefly is too heavy; trust canExecute
-            return file.canExecute()
-        } catch (e: Exception) {
-            Log.w(tag, "chmod failed for ${file.absolutePath}", e)
-            return false
         }
     }
 
@@ -124,20 +82,59 @@ class FastbootRunner(private val context: Context) {
 
     suspend fun run(vararg args: String): ExecResult = withContext(Dispatchers.IO) {
         val bin = ensureBinary()
-        val cmd = listOf(bin.absolutePath) + args.toList()
-        Log.i(tag, "exec: ${cmd.joinToString(" ")}")
 
-        val pb = ProcessBuilder(cmd)
-            .redirectErrorStream(false)
-            .directory(context.cacheDir)
-        pb.environment()["HOME"] = context.filesDir.absolutePath
-        pb.environment()["TMPDIR"] = context.cacheDir.absolutePath
+        // Try direct exec first
+        val direct = tryExec(listOf(bin.absolutePath) + args.toList())
+        if (direct != null && !isPermissionDenied(direct)) {
+            return@withContext direct
+        }
 
-        val process = pb.start()
-        val stdout = process.inputStream.bufferedReader().readText()
-        val stderr = process.errorStream.bufferedReader().readText()
-        val code = process.waitFor()
-        ExecResult(code, stdout.trim(), stderr.trim())
+        // Fall back: run through dynamic linker (works when noexec on data)
+        val linker = findLinker()
+        if (linker != null) {
+            Log.i(tag, "Retry via linker: $linker")
+            val viaLinker = tryExec(listOf(linker, bin.absolutePath) + args.toList())
+            if (viaLinker != null) return@withContext viaLinker
+        }
+
+        direct ?: ExecResult(
+            13,
+            "",
+            "Permission denied executing ${bin.absolutePath}. " +
+                "Install a build that extracts jniLibs (useLegacyPackaging)."
+        )
+    }
+
+    private fun isPermissionDenied(r: ExecResult): Boolean {
+        val msg = (r.stderr + r.stdout).lowercase()
+        return r.exitCode == 13 || msg.contains("permission denied") || msg.contains("error=13")
+    }
+
+    private fun findLinker(): String? {
+        val candidates = listOf(
+            "/system/bin/linker64",
+            "/system/bin/linker"
+        )
+        return candidates.firstOrNull { File(it).exists() }
+    }
+
+    private fun tryExec(cmd: List<String>): ExecResult? {
+        return try {
+            Log.i(tag, "exec: ${cmd.joinToString(" ")}")
+            val pb = ProcessBuilder(cmd)
+                .redirectErrorStream(false)
+                .directory(context.cacheDir)
+            pb.environment()["HOME"] = context.filesDir.absolutePath
+            pb.environment()["TMPDIR"] = context.cacheDir.absolutePath
+            val process = pb.start()
+            val stdout = process.inputStream.bufferedReader().readText()
+            val stderr = process.errorStream.bufferedReader().readText()
+            val code = process.waitFor()
+            ExecResult(code, stdout.trim(), stderr.trim())
+        } catch (e: Exception) {
+            Log.w(tag, "exec failed: ${e.message}")
+            ExecResult(13, "", e.message ?: "exec failed")
+        }
     }
 
     suspend fun flash(partition: String, imageFile: File): ExecResult {
