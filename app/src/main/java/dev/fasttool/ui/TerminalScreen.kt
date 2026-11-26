@@ -1,5 +1,6 @@
 package dev.fasttool.ui
 
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -19,12 +20,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.fasttool.fastboot.HostState
+import dev.fasttool.fastboot.UsbFastbootManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -39,6 +43,10 @@ enum class LineType {
 
 @Composable
 fun TerminalScreen() {
+    val context = LocalContext.current
+    val usbManager = remember { UsbFastbootManager(context) }
+    val hostState by usbManager.state.collectAsState()
+
     var lines by remember {
         mutableStateOf(
             listOf(
@@ -47,12 +55,34 @@ fun TerminalScreen() {
         )
     }
     var input by remember { mutableStateOf("") }
-    var isBusy by remember { mutableStateOf(false) }
+    var showTemplates by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
 
+    val isBusy = hostState is HostState.Busy
+
     fun append(text: String, type: LineType = LineType.Output) {
         lines = lines + TerminalLine(text, type)
+    }
+
+    val statusText = when (val s = hostState) {
+        is HostState.NoDevice -> "OTG host · no device"
+        is HostState.PermissionNeeded -> "OTG host · permission needed"
+        is HostState.Ready -> "OTG host · ready"
+        is HostState.Busy -> "OTG host · ${s.message}"
+        is HostState.Error -> "OTG host · error"
+    }
+
+    val statusColor = when (hostState) {
+        is HostState.Ready -> Color(0xFF4ADE80)
+        is HostState.Busy -> Color(0xFFFACC15)
+        is HostState.Error, is HostState.PermissionNeeded -> Color(0xFFF87171)
+        else -> Color(0xFF767676)
+    }
+
+    DisposableEffect(Unit) {
+        usbManager.start()
+        onDispose { usbManager.stop() }
     }
 
     fun runCommand(raw: String) {
@@ -67,63 +97,100 @@ fun TerminalScreen() {
         val args = parts.drop(1)
 
         scope.launch {
-            isBusy = true
-            delay(120)
-
             when (cmd) {
                 "help" -> {
                     append("FastTool — available commands", LineType.System)
                     append("")
                     append("  help          Show this help")
-                    append("  status        Show OTG / host status")
-                    append("  devices       List connected devices")
-                    append("  otg           OTG host information")
+                    append("  status        Show host / device status")
+                    append("  devices       List connected USB devices")
+                    append("  flash <part>  Flash a partition (use Templates)")
                     append("  clear         Clear the terminal")
                     append("  version       Show FastTool version")
-                    append("  echo <text>   Echo text back")
                     append("")
-                    append("More commands will appear as backends are connected.", LineType.System)
+                    append("Use the download button for flash templates.", LineType.System)
                 }
                 "status" -> {
                     append("Host status", LineType.System)
-                    append("  Mode          OTG host")
-                    append("  State         ready")
-                    append("  Backend       Android (simulated)")
-                    append("  Permissions   USB host not yet linked")
+                    when (val s = hostState) {
+                        is HostState.NoDevice -> {
+                            append("  State         no device")
+                            append("  Hint          Connect a device in fastboot mode over OTG")
+                        }
+                        is HostState.PermissionNeeded -> {
+                            append("  State         waiting for USB permission")
+                        }
+                        is HostState.Ready -> {
+                            append("  State         ready")
+                            append("  Device        ${s.device.product ?: s.device.deviceName}")
+                            append("  VID:PID       ${s.device.vendorId.toString(16)}:${s.device.productId.toString(16)}")
+                        }
+                        is HostState.Busy -> append("  State         busy — ${s.message}")
+                        is HostState.Error -> append("  State         error — ${s.message}")
+                    }
                 }
                 "devices" -> {
-                    append("Scanning for devices…", LineType.System)
-                    delay(600)
-                    append("No devices detected (simulation).")
-                    append("Connect a device over OTG and grant access when prompted.", LineType.System)
-                }
-                "otg" -> {
-                    append("OTG Host", LineType.System)
-                    append("  Role          host")
-                    append("  USB           ready")
-                    append("  Power         on")
-                    append("  Protocol      USB 2.0 / 3.x (host)")
-                    append("")
-                    append("This UI is prepared for real USB host / fastboot integration.", LineType.System)
+                    append("Scanning USB…", LineType.System)
+                    usbManager.scanConnectedDevices()
+                    delay(300)
+                    when (val s = hostState) {
+                        is HostState.Ready -> {
+                            append("Found device:", LineType.Success)
+                            append("  ${s.device.product ?: s.device.deviceName}")
+                            append("  ${s.device.manufacturer ?: ""}  ${s.device.vendorId.toString(16)}:${s.device.productId.toString(16)}")
+                        }
+                        else -> {
+                            append("No fastboot device detected.")
+                            append("Put the target device in fastboot mode and connect via OTG.", LineType.System)
+                        }
+                    }
                 }
                 "clear" -> {
                     lines = listOf(TerminalLine("Session cleared", LineType.System))
                 }
                 "version" -> {
                     append("FastTool 0.1.0")
-                    append("Android · Material 3 Expressive")
+                    append("Android · Fastboot tool")
                     append("https://github.com/Classity-Real/FastTool")
                 }
-                "echo" -> {
-                    append(args.joinToString(" "))
+                "flash" -> {
+                    append("Use the Templates button (top right) to select images and flash.", LineType.System)
                 }
                 else -> {
                     append("Unknown command: $cmd", LineType.Error)
                     append("Type \"help\" for available commands.", LineType.System)
                 }
             }
+            listState.animateScrollToItem(lines.lastIndex.coerceAtLeast(0))
+        }
+    }
 
-            isBusy = false
+    fun onFlash(template: FlashTemplate, images: Map<String, Uri>) {
+        scope.launch {
+            append("Template: ${template.title}", LineType.System)
+            template.partitions.forEach { part ->
+                val uri = images[part]
+                append("  $part ← ${uri?.lastPathSegment ?: "?"}")
+            }
+            append("")
+
+            if (hostState !is HostState.Ready) {
+                append("No fastboot device ready. Connect a device first.", LineType.Error)
+                return@launch
+            }
+
+            for (part in template.partitions) {
+                val uri = images[part] ?: continue
+                append("Flashing $part…")
+                val result = usbManager.flash(part, uri.toString())
+                result.onSuccess {
+                    append(it, LineType.Success)
+                }.onFailure {
+                    append("Failed: ${it.message}", LineType.Error)
+                }
+            }
+            usbManager.setReadyFromCurrent()
+            append("Template finished.", LineType.System)
             listState.animateScrollToItem(lines.lastIndex.coerceAtLeast(0))
         }
     }
@@ -159,13 +226,10 @@ fun TerminalScreen() {
                     Box(
                         modifier = Modifier
                             .size(7.dp)
-                            .background(
-                                color = if (isBusy) Color(0xFFFACC15) else Color(0xFF4ADE80),
-                                shape = CircleShape
-                            )
+                            .background(color = statusColor, shape = CircleShape)
                     )
                     Text(
-                        text = if (isBusy) "OTG host · working…" else "OTG host · ready",
+                        text = statusText,
                         fontSize = 12.5.sp,
                         fontWeight = FontWeight.Medium,
                         color = Color(0xFF767676),
@@ -175,10 +239,7 @@ fun TerminalScreen() {
             }
 
             Surface(
-                onClick = {
-                    append("Templates / profiles are not implemented yet.", LineType.System)
-                    append("This button is reserved for installing device profiles and command packs.", LineType.System)
-                },
+                onClick = { showTemplates = true },
                 shape = CircleShape,
                 color = Color(0xFF1E1E1E),
                 modifier = Modifier.size(52.dp)
@@ -186,7 +247,7 @@ fun TerminalScreen() {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
                         imageVector = Icons.Default.Download,
-                        contentDescription = "Install template",
+                        contentDescription = "Templates",
                         tint = Color(0xFFECECEC),
                         modifier = Modifier.size(24.dp)
                     )
@@ -322,10 +383,17 @@ fun TerminalScreen() {
         }
     }
 
+    if (showTemplates) {
+        TemplatesSheet(
+            onDismiss = { showTemplates = false },
+            onFlash = { template, images -> onFlash(template, images) }
+        )
+    }
+
     LaunchedEffect(Unit) {
-        delay(1600)
+        delay(1200)
         if (lines.size == 1) {
-            append("Type \"help\" to get started.", LineType.System)
+            append("Type \"help\" or open Templates (top right).", LineType.System)
         }
     }
 }
