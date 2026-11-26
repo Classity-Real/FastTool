@@ -14,6 +14,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -56,6 +57,7 @@ fun TerminalScreen() {
     }
     var input by remember { mutableStateOf("") }
     var showTemplates by remember { mutableStateOf(false) }
+    var showFlash by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
 
@@ -100,20 +102,11 @@ fun TerminalScreen() {
             when {
                 cmd == "help" -> {
                     append("FastTool commands:", LineType.System)
-                    append("  help")
-                    append("  status")
-                    append("  devices")
-                    append("  clear")
-                    append("  version")
-                    append("  fastboot <args>   run real fastboot")
+                    append("  help / status / devices / clear / version")
+                    append("  fastboot <args>")
                     append("")
-                    append("Examples:", LineType.System)
-                    append("  fastboot devices")
-                    append("  fastboot getvar product")
-                    append("  fastboot reboot")
-                    append("  fastboot flash boot boot.img")
-                    append("")
-                    append("Or use Templates (download button).", LineType.System)
+                    append("UI: bolt = Flash partition + image", LineType.System)
+                    append("    download = Templates", LineType.System)
                 }
                 cmd == "status" -> {
                     append("Host status", LineType.System)
@@ -179,27 +172,29 @@ fun TerminalScreen() {
         }
     }
 
-    fun onFlash(template: FlashTemplate, images: Map<String, Uri>) {
+    fun onTemplateFlash(template: FlashTemplate, images: Map<String, Uri>) {
         scope.launch {
             append("Template: ${template.title}", LineType.System)
-            template.partitions.forEach { part ->
-                val uri = images[part]
-                append("  $part ← ${uri?.lastPathSegment ?: "?"}")
-            }
-            append("")
-
             for (part in template.partitions) {
                 val uri = images[part] ?: continue
                 append("Flashing $part…")
                 val result = usbManager.flash(part, uri)
-                result.onSuccess {
-                    append(it, LineType.Success)
-                }.onFailure {
-                    append("Failed: ${it.message}", LineType.Error)
-                }
+                result.onSuccess { append(it, LineType.Success) }
+                    .onFailure { append("Failed: ${it.message}", LineType.Error) }
             }
             usbManager.setReadyFromCurrent()
             append("Template finished.", LineType.System)
+            listState.animateScrollToItem(lines.lastIndex.coerceAtLeast(0))
+        }
+    }
+
+    fun onSingleFlash(partition: String, uri: Uri) {
+        scope.launch {
+            append("Flash $partition ← ${uri.lastPathSegment}", LineType.System)
+            val result = usbManager.flash(partition, uri)
+            result.onSuccess { append(it, LineType.Success) }
+                .onFailure { append("Failed: ${it.message}", LineType.Error) }
+            usbManager.setReadyFromCurrent()
             listState.animateScrollToItem(lines.lastIndex.coerceAtLeast(0))
         }
     }
@@ -246,19 +241,36 @@ fun TerminalScreen() {
                 }
             }
 
-            Surface(
-                onClick = { showTemplates = true },
-                shape = CircleShape,
-                color = Color(0xFF1E1E1E),
-                modifier = Modifier.size(52.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = Icons.Default.Download,
-                        contentDescription = "Templates",
-                        tint = Color(0xFFECECEC),
-                        modifier = Modifier.size(24.dp)
-                    )
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Surface(
+                    onClick = { showFlash = true },
+                    shape = CircleShape,
+                    color = Color(0xFF1E1E1E),
+                    modifier = Modifier.size(52.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.FlashOn,
+                            contentDescription = "Flash",
+                            tint = Color(0xFFECECEC),
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+                Surface(
+                    onClick = { showTemplates = true },
+                    shape = CircleShape,
+                    color = Color(0xFF1E1E1E),
+                    modifier = Modifier.size(52.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.Download,
+                            contentDescription = "Templates",
+                            tint = Color(0xFFECECEC),
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
                 }
             }
         }
@@ -390,10 +402,17 @@ fun TerminalScreen() {
         }
     }
 
+    if (showFlash) {
+        FlashSheet(
+            onDismiss = { showFlash = false },
+            onFlash = { part, uri -> onSingleFlash(part, uri) }
+        )
+    }
+
     if (showTemplates) {
         TemplatesSheet(
             onDismiss = { showTemplates = false },
-            onFlash = { template, images -> onFlash(template, images) }
+            onFlash = { template, images -> onTemplateFlash(template, images) }
         )
     }
 
