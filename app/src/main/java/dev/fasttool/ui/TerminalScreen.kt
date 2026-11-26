@@ -149,7 +149,6 @@ fun TerminalScreen() {
                     append("https://github.com/Classity-Real/FastTool")
                 }
                 cmd == "fastboot" -> {
-                    // Pass everything after "fastboot" to the real binary
                     val result = usbManager.runFastboot(*args.toTypedArray())
                     result.onSuccess { out ->
                         out.lines().forEach { line ->
@@ -160,7 +159,6 @@ fun TerminalScreen() {
                         append(it.message ?: "fastboot failed", LineType.Error)
                     }
                 }
-                // Common fastboot subcommands without typing "fastboot" prefix
                 cmd in listOf("getvar", "reboot", "flash", "erase", "oem", "continue", "boot") -> {
                     val result = usbManager.runFastboot(cmd, *args.toTypedArray())
                     result.onSuccess { out ->
@@ -211,7 +209,7 @@ fun TerminalScreen() {
             .fillMaxSize()
             .background(Color(0xFF121212))
             .statusBarsPadding()
-            .navigationBarsPadding()
+            .imePadding()
     ) {
         Row(
             modifier = Modifier
@@ -324,7 +322,8 @@ fun TerminalScreen() {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 20.dp, end = 20.dp, bottom = 28.dp),
+                .navigationBarsPadding()
+                .padding(start = 20.dp, end = 20.dp, bottom = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
