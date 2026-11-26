@@ -24,13 +24,16 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # Explicitly avoid the removed "tools" package
+          packages: 'platform-tools'
 
       - name: Accept Android licenses
         run: yes | sdkmanager --licenses || true
 
-      - name: Install SDK packages
+      - name: Install required SDK packages
         run: |
-          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
