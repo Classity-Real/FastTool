@@ -3,12 +3,30 @@ package dev.fasttool.ui
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -46,8 +64,8 @@ fun TemplatesSheet(
 ) {
     var selected by remember { mutableStateOf<FlashTemplate?>(null) }
     val imageUris = remember { mutableStateMapOf<String, Uri>() }
-
     var pickingPartition by remember { mutableStateOf<String?>(null) }
+
     val picker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
@@ -75,19 +93,23 @@ fun TemplatesSheet(
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFFECECEC)
             )
+
             Spacer(Modifier = Modifier.height(6.dp))
+
             Text(
-                text = if (selected == null)
+                text = if (selected == null) {
                     "Choose a flash profile"
-                else
-                    selected!!.description,
+                } else {
+                    selected!!.description
+                },
                 fontSize = 13.sp,
                 color = Color(0xFF767676)
             )
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            if (selected == null) {
+            val current = selected
+            if (current == null) {
                 TEMPLATES.forEach { template ->
                     TemplateCard(
                         template = template,
@@ -99,7 +121,7 @@ fun TemplatesSheet(
                     Spacer(modifier = Modifier.height(10.dp))
                 }
             } else {
-                selected!!.partitions.forEach { partition ->
+                current.partitions.forEach { partition ->
                     val uri = imageUris[partition]
                     Surface(
                         onClick = {
@@ -143,12 +165,12 @@ fun TemplatesSheet(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                val allSelected = selected!!.partitions.all { imageUris.containsKey(it) }
+                val allSelected = current.partitions.all { imageUris.containsKey(it) }
 
                 Button(
                     onClick = {
                         if (allSelected) {
-                            onFlash(selected!!, imageUris.toMap())
+                            onFlash(current, imageUris.toMap())
                             onDismiss()
                         }
                     },
@@ -164,7 +186,7 @@ fun TemplatesSheet(
                         disabledContentColor = Color(0xFF666666)
                     )
                 ) {
-                    Text("Flash", fontWeight = FontWeight.SemiBold)
+                    Text(text = "Flash", fontWeight = FontWeight.SemiBold)
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -173,7 +195,7 @@ fun TemplatesSheet(
                     onClick = { selected = null },
                     modifier = Modifier.align(Alignment.CenterHorizontally)
                 ) {
-                    Text("Back", color = Color(0xFF767676))
+                    Text(text = "Back", color = Color(0xFF767676))
                 }
             }
         }
