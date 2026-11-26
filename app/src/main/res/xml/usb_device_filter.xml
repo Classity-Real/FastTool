@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Common fastboot / Google / OEM vendor IDs -->
+    <usb-device vendor-id="6353" />   <!-- Google -->
+    <usb-device vendor-id="4817" />   <!-- Xiaomi -->
+    <usb-device vendor-id="10007" />  <!-- Oppo / Realme / OnePlus related -->
+    <usb-device vendor-id="10569" />  <!-- Samsung -->
+    <usb-device vendor-id="12619" />  <!-- Huawei -->
+    <usb-device vendor-id="10473" />  <!-- HTC -->
+    <usb-device vendor-id="8888" />   <!-- Various OEMs -->
+    <usb-device vendor-id="4817" />
+    <!-- Catch-all for many devices in fastboot (class 0xFF often) -->
+    <usb-device class="255" subclass="66" protocol="1" />
+</resources>
