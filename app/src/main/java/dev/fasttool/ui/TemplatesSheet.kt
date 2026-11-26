@@ -6,7 +6,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -84,8 +83,9 @@ fun TemplatesSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 32.dp)
+                .padding(horizontal = 20.dp, vertical = 8.dp)
+                .padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Text(
                 text = if (selected == null) "Templates" else selected!!.title,
@@ -93,8 +93,6 @@ fun TemplatesSheet(
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFFECECEC)
             )
-
-            Spacer(Modifier = Modifier.height(6.dp))
 
             Text(
                 text = if (selected == null) {
@@ -106,8 +104,6 @@ fun TemplatesSheet(
                 color = Color(0xFF767676)
             )
 
-            Spacer(modifier = Modifier.height(20.dp))
-
             val current = selected
             if (current == null) {
                 TEMPLATES.forEach { template ->
@@ -118,7 +114,6 @@ fun TemplatesSheet(
                             imageUris.clear()
                         }
                     )
-                    Spacer(modifier = Modifier.height(10.dp))
                 }
             } else {
                 current.partitions.forEach { partition ->
@@ -160,10 +155,7 @@ fun TemplatesSheet(
                             }
                         }
                     }
-                    Spacer(modifier = Modifier.height(10.dp))
                 }
-
-                Spacer(modifier = Modifier.height(12.dp))
 
                 val allSelected = current.partitions.all { imageUris.containsKey(it) }
 
@@ -188,8 +180,6 @@ fun TemplatesSheet(
                 ) {
                     Text(text = "Flash", fontWeight = FontWeight.SemiBold)
                 }
-
-                Spacer(modifier = Modifier.height(8.dp))
 
                 TextButton(
                     onClick = { selected = null },
@@ -220,17 +210,17 @@ private fun TemplateCard(
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 15.sp
             )
-            Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = template.description,
                 color = Color(0xFF767676),
-                fontSize = 12.sp
+                fontSize = 12.sp,
+                modifier = Modifier.padding(top = 4.dp)
             )
-            Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = template.partitions.joinToString(" · "),
                 color = Color(0xFF4ADE80),
-                fontSize = 11.sp
+                fontSize = 11.sp,
+                modifier = Modifier.padding(top = 8.dp)
             )
         }
     }
