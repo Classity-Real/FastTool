@@ -6,38 +6,53 @@ Native Android app that implements the original FastTool terminal concept.
 
 ## Status
 
-- ✅ Pixel-perfect recreation of the original concept UI
-- ✅ Interactive terminal with command input
+- ✅ Pixel-accurate recreation of the original concept UI
+- ✅ Interactive terminal with command input + history feel
 - ✅ Built-in commands (`help`, `status`, `devices`, `otg`, `clear`, `version`…)
-- ⏳ Real fastboot / OTG / WebUSB-style backends (next)
+- ⏳ Real fastboot / USB host backends (next)
 
 ## Tech
 
-- Kotlin
-- Jetpack Compose
-- Material 3
-- Min SDK 26 / Target SDK 35
+| Item | Value |
+|------|-------|
+| Language | Kotlin |
+| UI | Jetpack Compose + Material 3 |
+| Min SDK | 26 |
+| Target SDK | 35 |
+| Package | `com.classity.fasttool` |
 
-## Build
+## Build & Run
 
-Open the project in **Android Studio** (Hedgehog or newer recommended) and run the `app` configuration.
+1. Open the project in **Android Studio** (Koala / Ladybug or newer recommended)
+2. Let Gradle sync
+3. Run the `app` configuration on a device or emulator
 
 ```bash
 ./gradlew assembleDebug
 ```
 
-The APK will be at `app/build/outputs/apk/debug/app-debug.apk`.
+APK output: `app/build/outputs/apk/debug/app-debug.apk`
 
 ## Design
 
-The UI deliberately matches the original concept:
+Faithful recreation of the original concept:
 
-- Dark surfaces (`#121212` / `#161616`)
-- Status indicator for OTG host state
-- Large rounded terminal panel
-- Thumb-friendly command bar + circular run button
-- JetBrains Mono for the terminal
+- Background `#121212`
+- Terminal surface `#161616`
+- Soft green status when ready, yellow while working
+- Large 28dp rounded terminal panel
+- 52dp circular action buttons
+- Monospace terminal text
+
+The UI is intentionally restrained so it feels like a real device tool rather than a flashy terminal skin.
+
+## Next steps
+
+- USB Host / fastboot protocol integration
+- Real device detection
+- Command profiles / templates (the download button)
+- Persistent session history
 
 ---
 
-Made real from the original concept.
+Made real from the original Android concept.
