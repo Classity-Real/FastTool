@@ -4,10 +4,50 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path
-        android:fillColor="#E4E4E4"
-        android:pathData="M36,54h8v6h-8z" />
-    <path
-        android:fillColor="#4ADE80"
-        android:pathData="M48,54h18v6h-18z" />
+
+    <!-- USB trident only (for adaptive icon foreground safe zone ~66dp center) -->
+    <group
+        android:translateX="0"
+        android:translateY="0">
+
+        <!-- Stem -->
+        <path
+            android:fillColor="#BDBDBD"
+            android:pathData="M51,76 L57,76 L57,50 L51,50 Z" />
+
+        <!-- Bottom circle -->
+        <path
+            android:fillColor="#BDBDBD"
+            android:pathData="M54,82 m-6.5,0 a6.5,6.5 0 1,1 13,0 a6.5,6.5 0 1,1 -13,0" />
+
+        <!-- Arrow -->
+        <path
+            android:fillColor="#BDBDBD"
+            android:pathData="M54,26 L63,42 L54,38.5 L45,42 Z" />
+
+        <!-- Arrow stem extension -->
+        <path
+            android:fillColor="#BDBDBD"
+            android:pathData="M51,40 L57,40 L57,50 L51,50 Z" />
+
+        <!-- Left arm -->
+        <path
+            android:fillColor="#BDBDBD"
+            android:strokeWidth="4.5"
+            android:strokeColor="#BDBDBD"
+            android:pathData="M54,54 Q40,50 36,42" />
+        <path
+            android:fillColor="#BDBDBD"
+            android:pathData="M30,38 m-5.5,0 a5.5,5.5 0 1,1 11,0 a5.5,5.5 0 1,1 -11,0" />
+
+        <!-- Right arm -->
+        <path
+            android:fillColor="#BDBDBD"
+            android:strokeWidth="4.5"
+            android:strokeColor="#BDBDBD"
+            android:pathData="M54,54 Q68,50 72,42" />
+        <path
+            android:fillColor="#BDBDBD"
+            android:pathData="M66,32 h11 v11 h-11 z" />
+    </group>
 </vector>
