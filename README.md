@@ -7,8 +7,9 @@ Native Android app that implements the original FastTool terminal concept.
 ## Status
 
 - ✅ Pixel-accurate recreation of the original concept UI
-- ✅ Interactive terminal with command input + history feel
+- ✅ Interactive terminal with command input
 - ✅ Built-in commands (`help`, `status`, `devices`, `otg`, `clear`, `version`…)
+- ✅ GitHub Actions CI that builds the APK on every push
 - ⏳ Real fastboot / USB host backends (next)
 
 ## Tech
@@ -17,21 +18,29 @@ Native Android app that implements the original FastTool terminal concept.
 |------|-------|
 | Language | Kotlin |
 | UI | Jetpack Compose + Material 3 |
+| Package | `dev.fasttool` |
 | Min SDK | 26 |
 | Target SDK | 35 |
-| Package | `com.classity.fasttool` |
 
 ## Build & Run
 
-1. Open the project in **Android Studio** (Koala / Ladybug or newer recommended)
+### Locally
+
+1. Open the project in **Android Studio**
 2. Let Gradle sync
-3. Run the `app` configuration on a device or emulator
+3. Run the `app` configuration
 
 ```bash
 ./gradlew assembleDebug
 ```
 
-APK output: `app/build/outputs/apk/debug/app-debug.apk`
+APK: `app/build/outputs/apk/debug/app-debug.apk`
+
+### CI
+
+Every push / PR to `main` triggers a GitHub Actions workflow that builds the debug APK and uploads it as an artifact named **FastTool-debug**.
+
+You can also trigger it manually from the Actions tab.
 
 ## Design
 
@@ -43,15 +52,6 @@ Faithful recreation of the original concept:
 - Large 28dp rounded terminal panel
 - 52dp circular action buttons
 - Monospace terminal text
-
-The UI is intentionally restrained so it feels like a real device tool rather than a flashy terminal skin.
-
-## Next steps
-
-- USB Host / fastboot protocol integration
-- Real device detection
-- Command profiles / templates (the download button)
-- Persistent session history
 
 ---
 
