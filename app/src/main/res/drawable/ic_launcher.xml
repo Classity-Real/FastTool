@@ -5,47 +5,43 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Dark background -->
     <path
         android:fillColor="#121212"
         android:pathData="M0,0h108v108h-108z" />
 
-    <!-- USB trident — centered, muted gray -->
-    <!-- Stem -->
+    <!-- Center stem -->
     <path
-        android:fillColor="#9E9E9E"
-        android:pathData="M51,78 L57,78 L57,48 L51,48 Z" />
+        android:fillColor="#A0A0A0"
+        android:pathData="M50.5,40h7v40h-7z" />
 
-    <!-- Bottom circle (plug base) -->
+    <!-- Bottom ball -->
     <path
-        android:fillColor="#9E9E9E"
-        android:pathData="M54,84 m-7,0 a7,7 0 1,1 14,0 a7,7 0 1,1 -14,0" />
+        android:fillColor="#A0A0A0"
+        android:pathData="M54,86c-5.5,0 -10,-4.5 -10,-10s4.5,-10 10,-10 10,4.5 10,10 -4.5,10 -10,10z" />
 
-    <!-- Top arrow head -->
+    <!-- Arrow head -->
     <path
-        android:fillColor="#9E9E9E"
-        android:pathData="M54,22 L64,40 L54,36 L44,40 Z" />
+        android:fillColor="#A0A0A0"
+        android:pathData="M54,20 L66,42 L54,37 L42,42 Z" />
 
-    <!-- Left branch (circle) -->
+    <!-- Left branch stem (thick) -->
     <path
-        android:fillColor="#9E9E9E"
-        android:pathData="M54,52 C54,52 42,48 38,42"
-        android:strokeWidth="5"
-        android:strokeColor="#9E9E9E"
-        android:fillColor="#00000000" />
-    <path
-        android:fillColor="#9E9E9E"
-        android:pathData="M32,36 m-6,0 a6,6 0 1,1 12,0 a6,6 0 1,1 -12,0" />
+        android:fillColor="#A0A0A0"
+        android:pathData="M54,52 C48,50 40,46 34,40 L38,36 C43,41 49,45 54,47 Z" />
 
-    <!-- Right branch (square) -->
+    <!-- Left circle -->
     <path
-        android:fillColor="#9E9E9E"
-        android:pathData="M54,52 C54,52 66,48 70,42"
-        android:strokeWidth="5"
-        android:strokeColor="#9E9E9E"
-        android:fillColor="#00000000" />
+        android:fillColor="#A0A0A0"
+        android:pathData="M32,36c-4.4,0 -8,-3.6 -8,-8s3.6,-8 8,-8 8,3.6 8,8 -3.6,8 -8,8z" />
+
+    <!-- Right branch stem -->
     <path
-        android:fillColor="#9E9E9E"
-        android:pathData="M64,30 h12 v12 h-12 z" />
+        android:fillColor="#A0A0A0"
+        android:pathData="M54,52 C60,50 68,46 74,40 L70,36 C65,41 59,45 54,47 Z" />
+
+    <!-- Right square -->
+    <path
+        android:fillColor="#A0A0A0"
+        android:pathData="M68,24h14v14h-14z" />
 
 </vector>
