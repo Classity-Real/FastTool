@@ -8,6 +8,7 @@ import android.content.IntentFilter
 import android.hardware.usb.UsbConstants
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
+import android.net.Uri
 import android.os.Build
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -32,6 +33,7 @@ sealed class HostState {
 class UsbFastbootManager(private val context: Context) {
 
     private val usbManager = context.getSystemService(Context.USB_SERVICE) as UsbManager
+    private val runner = FastbootRunner(context)
 
     private val _state = MutableStateFlow<HostState>(HostState.NoDevice)
     val state: StateFlow<HostState> = _state.asStateFlow()
@@ -73,8 +75,6 @@ class UsbFastbootManager(private val context: Context) {
             @Suppress("UnspecifiedRegisterReceiverFlag")
             context.registerReceiver(usbReceiver, filter)
         }
-
-        // Check already connected devices
         scanConnectedDevices()
     }
 
@@ -126,42 +126,71 @@ class UsbFastbootManager(private val context: Context) {
         scanConnectedDevices()
     }
 
-    // --- Fastboot command stubs (real protocol / binary integration comes next) ---
+    // --- Real fastboot commands via bundled binary ---
 
-    suspend fun flash(partition: String, imagePath: String): Result<String> {
-        val current = _state.value
-        if (current !is HostState.Ready) {
-            return Result.failure(IllegalStateException("No fastboot device ready"))
+    suspend fun flash(partition: String, imageUri: Uri): Result<String> {
+        return try {
+            setBusy("Flashing $partition…")
+            val imageFile = runner.materializeUri(imageUri, "$partition.img")
+            val result = runner.flash(partition, imageFile)
+            if (result.exitCode == 0) {
+                Result.success(result.stdout.ifBlank { "OK: flashed $partition" })
+            } else {
+                val msg = listOf(result.stderr, result.stdout).filter { it.isNotBlank() }.joinToString("\n")
+                Result.failure(RuntimeException(msg.ifBlank { "fastboot exited ${result.exitCode}" }))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
         }
-        setBusy("Flashing $partition…")
-        // TODO: real fastboot flash implementation (USB bulk or bundled binary)
-        return Result.success("Queued flash $partition ← $imagePath (protocol not yet wired)")
     }
 
-    suspend fun erase(partition: String): Result<String> {
-        val current = _state.value
-        if (current !is HostState.Ready) {
-            return Result.failure(IllegalStateException("No fastboot device ready"))
+    suspend fun flashPath(partition: String, imagePath: String): Result<String> {
+        return try {
+            setBusy("Flashing $partition…")
+            val result = runner.flash(partition, java.io.File(imagePath))
+            if (result.exitCode == 0) {
+                Result.success(result.stdout.ifBlank { "OK: flashed $partition" })
+            } else {
+                val msg = listOf(result.stderr, result.stdout).filter { it.isNotBlank() }.joinToString("\n")
+                Result.failure(RuntimeException(msg.ifBlank { "fastboot exited ${result.exitCode}" }))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
         }
-        setBusy("Erasing $partition…")
-        return Result.success("Queued erase $partition (protocol not yet wired)")
+    }
+
+    suspend fun devices(): Result<String> {
+        return try {
+            val result = runner.devices()
+            if (result.exitCode == 0) {
+                Result.success(result.stdout.ifBlank { "(no devices)" })
+            } else {
+                Result.failure(RuntimeException(result.stderr.ifBlank { "fastboot devices failed" }))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     suspend fun reboot(): Result<String> {
-        setBusy("Rebooting…")
-        return Result.success("Queued reboot (protocol not yet wired)")
+        return try {
+            setBusy("Rebooting…")
+            val result = runner.reboot()
+            if (result.exitCode == 0) Result.success("Rebooting")
+            else Result.failure(RuntimeException(result.stderr))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 }
 
 private fun UsbDevice.looksLikeFastboot(): Boolean {
-    // Heuristic: many devices in fastboot expose vendor-specific class or known VIDs
     if (vendorId == 0x18D1) return true // Google
-    // Interface class 0xFF is common for fastboot
     for (i in 0 until interfaceCount) {
         val intf = getInterface(i)
         if (intf.interfaceClass == UsbConstants.USB_CLASS_VENDOR_SPEC) return true
     }
-    return true // for now accept any attached device while developing
+    return true
 }
 
 private fun UsbDevice.toFastbootDevice() = FastbootDevice(
