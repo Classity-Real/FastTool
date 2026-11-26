@@ -94,7 +94,6 @@ fun TerminalScreen() {
 
         val parts = cmdLine.split(Regex("\\s+"))
         val cmd = parts[0].lowercase()
-        val args = parts.drop(1)
 
         scope.launch {
             when (cmd) {
@@ -103,8 +102,7 @@ fun TerminalScreen() {
                     append("")
                     append("  help          Show this help")
                     append("  status        Show host / device status")
-                    append("  devices       List connected USB devices")
-                    append("  flash <part>  Flash a partition (use Templates)")
+                    append("  devices       List connected USB / fastboot devices")
                     append("  clear         Clear the terminal")
                     append("  version       Show FastTool version")
                     append("")
@@ -130,19 +128,21 @@ fun TerminalScreen() {
                     }
                 }
                 "devices" -> {
-                    append("Scanning USB…", LineType.System)
+                    append("Scanning…", LineType.System)
                     usbManager.scanConnectedDevices()
-                    delay(300)
+                    delay(200)
+                    val fb = usbManager.devices()
+                    fb.onSuccess { out ->
+                        append("fastboot devices:", LineType.System)
+                        out.lines().forEach { append(it) }
+                    }.onFailure {
+                        append("fastboot devices failed: ${it.message}", LineType.Error)
+                    }
                     when (val s = hostState) {
                         is HostState.Ready -> {
-                            append("Found device:", LineType.Success)
-                            append("  ${s.device.product ?: s.device.deviceName}")
-                            append("  ${s.device.manufacturer ?: ""}  ${s.device.vendorId.toString(16)}:${s.device.productId.toString(16)}")
+                            append("USB device: ${s.device.product ?: s.device.deviceName}", LineType.Success)
                         }
-                        else -> {
-                            append("No fastboot device detected.")
-                            append("Put the target device in fastboot mode and connect via OTG.", LineType.System)
-                        }
+                        else -> {}
                     }
                 }
                 "clear" -> {
@@ -153,12 +153,9 @@ fun TerminalScreen() {
                     append("Android · Fastboot tool")
                     append("https://github.com/Classity-Real/FastTool")
                 }
-                "flash" -> {
-                    append("Use the Templates button (top right) to select images and flash.", LineType.System)
-                }
                 else -> {
                     append("Unknown command: $cmd", LineType.Error)
-                    append("Type \"help\" for available commands.", LineType.System)
+                    append("Type \"help\" or open Templates.", LineType.System)
                 }
             }
             listState.animateScrollToItem(lines.lastIndex.coerceAtLeast(0))
@@ -174,15 +171,10 @@ fun TerminalScreen() {
             }
             append("")
 
-            if (hostState !is HostState.Ready) {
-                append("No fastboot device ready. Connect a device first.", LineType.Error)
-                return@launch
-            }
-
             for (part in template.partitions) {
                 val uri = images[part] ?: continue
                 append("Flashing $part…")
-                val result = usbManager.flash(part, uri.toString())
+                val result = usbManager.flash(part, uri)
                 result.onSuccess {
                     append(it, LineType.Success)
                 }.onFailure {
@@ -202,7 +194,6 @@ fun TerminalScreen() {
             .statusBarsPadding()
             .navigationBarsPadding()
     ) {
-        // Header
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -255,7 +246,6 @@ fun TerminalScreen() {
             }
         }
 
-        // Terminal panel
         Surface(
             modifier = Modifier
                 .weight(1f)
@@ -312,7 +302,6 @@ fun TerminalScreen() {
             }
         }
 
-        // Command bar
         Row(
             modifier = Modifier
                 .fillMaxWidth()
