@@ -12,6 +12,11 @@ mkdir -p \
   "$RES/mipmap-xxxhdpi" \
   "$RES/drawable"
 
+# Avoid duplicate resource errors (XML + PNG same name)
+rm -f \
+  "$RES/drawable/ic_launcher.xml" \
+  "$RES/drawable/ic_launcher_foreground.xml"
+
 installed=0
 
 decode_one() {
@@ -28,27 +33,30 @@ decode_one "mipmap-hdpi/ic_launcher.png" "mipmap-hdpi_ic_launcher.png.b64"
 decode_one "mipmap-xhdpi/ic_launcher.png" "mipmap-xhdpi_ic_launcher.png.b64"
 decode_one "mipmap-xxhdpi/ic_launcher.png" "mipmap-xxhdpi_ic_launcher.png.b64"
 
-# xxxhdpi may be split into parts or single file
 if [[ -f "$B64DIR/mipmap-xxxhdpi_ic_launcher.png.b64" ]]; then
   decode_one "mipmap-xxxhdpi/ic_launcher.png" "mipmap-xxxhdpi_ic_launcher.png.b64"
 elif [[ -f "$B64DIR/xxxhdpi.part0" ]]; then
-  cat "$B64DIR"/xxxhdpi.part* | base64 -d > "$RES/mipmap-xxxhdpi/ic_launcher.png"
+  # Sort parts numerically so order is part0 part1 part2 part3
+  cat "$B64DIR"/xxxhdpi.part0 "$B64DIR"/xxxhdpi.part1 "$B64DIR"/xxxhdpi.part2 "$B64DIR"/xxxhdpi.part3 \
+    | base64 -d > "$RES/mipmap-xxxhdpi/ic_launcher.png"
   cp "$RES/mipmap-xxxhdpi/ic_launcher.png" "$RES/drawable/ic_launcher.png"
-  echo "wrote xxxhdpi+drawable from parts"
+  echo "wrote xxxhdpi+drawable from parts ($(wc -c < "$RES/mipmap-xxxhdpi/ic_launcher.png") bytes)"
   installed=$((installed+2))
 fi
 
 decode_one "drawable/ic_launcher.png" "drawable_ic_launcher.png.b64"
 decode_one "drawable/ic_launcher_foreground.png" "drawable_ic_launcher_foreground.png.b64"
 
-# Adaptive foreground: reuse launcher if missing
 if [[ ! -f "$RES/drawable/ic_launcher_foreground.png" && -f "$RES/drawable/ic_launcher.png" ]]; then
   cp "$RES/drawable/ic_launcher.png" "$RES/drawable/ic_launcher_foreground.png"
   echo "copied launcher → foreground"
+elif [[ ! -f "$RES/drawable/ic_launcher_foreground.png" && -f "$RES/mipmap-xxxhdpi/ic_launcher.png" ]]; then
+  cp "$RES/mipmap-xxxhdpi/ic_launcher.png" "$RES/drawable/ic_launcher_foreground.png"
+  echo "copied xxxhdpi → foreground"
 fi
 
 if [[ "$installed" -gt 0 ]]; then
   echo "Installed PNG icon(s) from base64"
 else
-  echo "No PNG base64 found — vector fallback remains"
+  echo "No PNG base64 found"
 fi
