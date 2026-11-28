@@ -27,7 +27,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.fasttool.RunMethod
-import androidx.compose.ui.Modifier as ComposeModifier
+
+// Modifier is androidx.compose.ui.modifier
+import androidx.compose.ui.modifier as M
 
 @Composable
 fun SetupFadeOverlay(
@@ -38,7 +40,7 @@ fun SetupFadeOverlay(
         visible = visible,
         enter = fadeIn(tween(450)),
         exit = fadeOut(tween(300)),
-        modifier = ComposeModifier.fillMaxSize()
+        modifier = M.fillMaxSize()
     ) {
         content()
     }
@@ -57,11 +59,11 @@ fun SetupOverlay(
     onDeclineWarning: () -> Unit
 ) {
     Box(
-        modifier = ComposeModifier.fillMaxSize().background(Color(0xEE0A0A0A)).padding(24.dp),
+        modifier = M.fillMaxSize().background(Color(0xEE0A0A0A)).padding(24.dp),
         contentAlignment = Alignment.Center
     ) {
         Column(
-            modifier = ComposeModifier.fillMaxWidth(),
+            modifier = M.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             when (phase) {
@@ -77,7 +79,7 @@ fun SetupOverlay(
                         onValueChange = onWorkDirTyped,
                         placeholder = { Text("Path or pick a folder", color = Color(0xFF666666)) },
                         singleLine = true,
-                        modifier = ComposeModifier.fillMaxWidth(),
+                        modifier = M.fillMaxWidth(),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedTextColor = Color(0xFFECECEC),
                             unfocusedTextColor = Color(0xFFECECEC),
@@ -121,9 +123,9 @@ fun SetupChoice(title: String, subtitle: String, selected: Boolean, onClick: () 
         onClick = onClick,
         shape = RoundedCornerShape(16.dp),
         color = if (selected) Color(0xFF1E2A1E) else Color(0xFF1A1A1A),
-        modifier = ComposeModifier.fillMaxWidth()
+        modifier = M.fillMaxWidth()
     ) {
-        Column(ComposeModifier.padding(16.dp)) {
+        Column(M.padding(16.dp)) {
             Text(title, color = Color(0xFFECECEC), fontWeight = FontWeight.Medium)
             Text(subtitle, color = Color(0xFF767676), fontSize = 12.sp)
         }
