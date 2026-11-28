@@ -210,7 +210,7 @@ fun TerminalScreen() {
     Column(
         modifier = Modifier.fillMaxSize().background(Color(0xFF0A0A0A)).statusBarsPadding().imePadding()
     ) {
-        Column(Modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 20.dp, bottom = 12.dp)) {
+        Column(modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 20.dp, bottom = 12.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text("FastTool", fontSize = 34.sp, fontWeight = FontWeight.Bold, color = Color(0xFFF5F5F5), letterSpacing = (-0.8).sp, modifier = Modifier.weight(1f))
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
