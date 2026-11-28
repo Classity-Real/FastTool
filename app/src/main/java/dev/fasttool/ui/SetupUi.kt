@@ -57,10 +57,7 @@ fun SetupOverlay(
     onDeclineWarning: () -> Unit
 ) {
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xEE0A0A0A))
-            .padding(24.dp),
+        modifier = Modifier.fillMaxSize().background(Color(0xEE0A0A0A)).padding(24.dp),
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -69,32 +66,12 @@ fun SetupOverlay(
         ) {
             when (phase) {
                 SetupPhase.Method -> {
-                    Text(
-                        "Which method are you using?",
-                        color = Color(0xFFECECEC),
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    SetupChoice(
-                        title = "Root",
-                        subtitle = "Uses su when available",
-                        selected = selectedMethod == RunMethod.Root,
-                        onClick = { onSelectMethod(RunMethod.Root) }
-                    )
-                    SetupChoice(
-                        title = "Normal",
-                        subtitle = "No root — OTG host only",
-                        selected = selectedMethod == RunMethod.Normal,
-                        onClick = { onSelectMethod(RunMethod.Normal) }
-                    )
+                    Text("Which method are you using?", color = Color(0xFFECECEC), fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                    SetupChoice("Root", "Uses su when available", selectedMethod == RunMethod.Root) { onSelectMethod(RunMethod.Root) }
+                    SetupChoice("Normal", "No root — OTG host only", selectedMethod == RunMethod.Normal) { onSelectMethod(RunMethod.Normal) }
                 }
                 SetupPhase.Directory -> {
-                    Text(
-                        "Select a directory for backup / restore",
-                        color = Color(0xFFECECEC),
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
+                    Text("Select a directory for backup / restore", color = Color(0xFFECECEC), fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                     OutlinedTextField(
                         value = workDir,
                         onValueChange = onWorkDirTyped,
@@ -110,48 +87,26 @@ fun SetupOverlay(
                         )
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        TextButton(onClick = onPickDirectory) {
-                            Text("Browse", color = Color(0xFF4ADE80))
-                        }
+                        TextButton(onClick = onPickDirectory) { Text("Browse", color = Color(0xFF4ADE80)) }
                         Button(
                             onClick = onContinueDirectory,
                             enabled = workDir.isNotBlank(),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFFE4E4E4),
-                                contentColor = Color(0xFF121212)
-                            )
-                        ) {
-                            Text("Continue")
-                        }
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE4E4E4), contentColor = Color(0xFF121212))
+                        ) { Text("Continue") }
                     }
                 }
                 SetupPhase.Warning -> {
+                    Text("Warning", color = Color(0xFFF87171), fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                     Text(
-                        "Warning",
-                        color = Color(0xFFF87171),
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        "By continuing you agree that FastTool can potentially brick your device " +
-                            "through your actions. The owner has nothing to do with any damage caused.",
-                        color = Color(0xFFB0B0B0),
-                        fontSize = 14.sp,
-                        lineHeight = 20.sp
+                        "By continuing you agree that FastTool can potentially brick your device through your actions. The owner has nothing to do with any damage caused.",
+                        color = Color(0xFFB0B0B0), fontSize = 14.sp, lineHeight = 20.sp
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        TextButton(onClick = onDeclineWarning) {
-                            Text("Cancel", color = Color(0xFF888888))
-                        }
+                        TextButton(onClick = onDeclineWarning) { Text("Cancel", color = Color(0xFF888888)) }
                         Button(
                             onClick = onAcceptWarning,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFFE4E4E4),
-                                contentColor = Color(0xFF121212)
-                            )
-                        ) {
-                            Text("I understand")
-                        }
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE4E4E4), contentColor = Color(0xFF121212))
+                        ) { Text("I understand") }
                     }
                 }
                 else -> {}
@@ -161,12 +116,7 @@ fun SetupOverlay(
 }
 
 @Composable
-fun SetupChoice(
-    title: String,
-    subtitle: String,
-    selected: Boolean,
-    onClick: () -> Unit
-) {
+fun SetupChoice(title: String, subtitle: String, selected: Boolean, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(16.dp),
