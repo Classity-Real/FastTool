@@ -129,6 +129,7 @@ fun TerminalScreen() {
                     when (val s = hostState) {
                         is HostState.NoDevice -> append("OTG host · no device")
                         is HostState.PermissionNeeded -> append("OTG host · permission needed")
+                        is HostState.AdbOnly -> append("Device Detected but not in Fastboot")
                         is HostState.Ready -> append("OTG host · ready (${s.device.product ?: s.device.deviceName})")
                         is HostState.Busy -> append("OTG host · ${s.message}")
                         is HostState.Error -> append("OTG host · error — ${s.message}")
@@ -187,22 +188,36 @@ fun TerminalScreen() {
         }
     }
 
+    var lastAdbNotice by remember { mutableStateOf(false) }
+    LaunchedEffect(hostState) {
+        when (hostState) {
+            is HostState.AdbOnly -> {
+                if (!lastAdbNotice) {
+                    lastAdbNotice = true
+                    append("Device Detected but not in Fastboot", LineType.System)
+                }
+            }
+            else -> lastAdbNotice = false
+        }
+    }
+
     val otgLabel = when (val s = hostState) {
         is HostState.NoDevice -> "No device"
         is HostState.PermissionNeeded -> "Permission needed"
+        is HostState.AdbOnly -> "Device Detected but not in Fastboot"
         is HostState.Ready -> s.device.product?.takeIf { it.isNotBlank() } ?: "Ready"
         is HostState.Busy -> s.message
         is HostState.Error -> "Error"
     }
     val otgColor = when (hostState) {
         is HostState.Ready -> Color(0xFF4ADE80)
-        is HostState.Busy, is HostState.PermissionNeeded -> Color(0xFFFBBF24)
+        is HostState.AdbOnly, is HostState.Busy, is HostState.PermissionNeeded -> Color(0xFFFBBF24)
         is HostState.Error -> Color(0xFFF87171)
         is HostState.NoDevice -> Color(0xFF666666)
     }
     val otgDot = when (hostState) {
         is HostState.Ready -> Color(0xFF4ADE80)
-        is HostState.Busy, is HostState.PermissionNeeded -> Color(0xFFFBBF24)
+        is HostState.AdbOnly, is HostState.Busy, is HostState.PermissionNeeded -> Color(0xFFFBBF24)
         is HostState.Error -> Color(0xFFF87171)
         is HostState.NoDevice -> Color(0xFF555555)
     }
