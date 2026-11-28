@@ -8,7 +8,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -231,6 +230,27 @@ fun TerminalScreen() {
         }
     }
 
+    val otgLabel = when (val s = hostState) {
+        is HostState.NoDevice -> "No device"
+        is HostState.PermissionNeeded -> "Permission needed"
+        is HostState.Ready -> s.device.product?.takeIf { it.isNotBlank() } ?: "Ready"
+        is HostState.Busy -> s.message
+        is HostState.Error -> "Error"
+    }
+    val otgColor = when (hostState) {
+        is HostState.Ready -> Color(0xFF4ADE80)
+        is HostState.Busy -> Color(0xFFFBBF24)
+        is HostState.PermissionNeeded -> Color(0xFFFBBF24)
+        is HostState.Error -> Color(0xFFF87171)
+        is HostState.NoDevice -> Color(0xFF666666)
+    }
+    val otgDot = when (hostState) {
+        is HostState.Ready -> Color(0xFF4ADE80)
+        is HostState.Busy, is HostState.PermissionNeeded -> Color(0xFFFBBF24)
+        is HostState.Error -> Color(0xFFF87171)
+        is HostState.NoDevice -> Color(0xFF555555)
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -238,19 +258,40 @@ fun TerminalScreen() {
             .statusBarsPadding()
             .imePadding()
     ) {
-        // Top title — not overlapped by terminal
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(start = 24.dp, end = 24.dp, top = 20.dp, bottom = 12.dp)
         ) {
-            Text(
-                text = "FastTool",
-                fontSize = 34.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFFF5F5F5),
-                letterSpacing = (-0.8).sp
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "FastTool",
+                    fontSize = 34.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFF5F5F5),
+                    letterSpacing = (-0.8).sp,
+                    modifier = Modifier.weight(1f)
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(7.dp)
+                            .background(otgDot, CircleShape)
+                    )
+                    Text(
+                        text = otgLabel,
+                        fontSize = 12.sp,
+                        color = otgColor,
+                        maxLines = 1
+                    )
+                }
+            }
             Text(
                 text = "\"Fastboot Tool made for Android :)\"",
                 fontSize = 13.sp,
@@ -259,7 +300,6 @@ fun TerminalScreen() {
             )
         }
 
-        // Full terminal output (below title)
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -292,7 +332,6 @@ fun TerminalScreen() {
                 }
             }
 
-            // Setup overlay with fade
             AnimatedVisibility(
                 visible = setupVisible && setupPhase != SetupPhase.Done && setupPhase != SetupPhase.Idle,
                 enter = fadeIn(tween(450)),
@@ -326,7 +365,6 @@ fun TerminalScreen() {
             }
         }
 
-        // Bottom bar: Template · input · Flash
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -335,7 +373,6 @@ fun TerminalScreen() {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // Templates
             Surface(
                 onClick = { showTemplates = true },
                 shape = CircleShape,
@@ -352,7 +389,6 @@ fun TerminalScreen() {
                 }
             }
 
-            // Command field
             Surface(
                 shape = RoundedCornerShape(28.dp),
                 color = Color(0xFF1A1A1A),
@@ -395,7 +431,6 @@ fun TerminalScreen() {
                 }
             }
 
-            // Flash
             Surface(
                 onClick = { showFlash = true },
                 shape = CircleShape,
