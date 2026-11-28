@@ -26,6 +26,8 @@ data class FastbootDevice(
 sealed class HostState {
     data object NoDevice : HostState()
     data object PermissionNeeded : HostState()
+    /** USB device present with ADB interface, not fastboot. */
+    data class AdbOnly(val device: FastbootDevice) : HostState()
     data class Ready(val device: FastbootDevice) : HostState()
     data class Busy(val message: String) : HostState()
     data class Error(val message: String) : HostState()
@@ -54,13 +56,13 @@ class UsbFastbootManager(private val context: Context) {
                         device?.let { onDeviceAttached(it) }
                     }
                     UsbManager.ACTION_USB_DEVICE_DETACHED -> {
-                        _state.value = HostState.NoDevice
+                        scanConnectedDevices()
                     }
                     permissionAction -> {
                         val device = intent.getParcelableExtraCompat<UsbDevice>(UsbManager.EXTRA_DEVICE)
                         val granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)
                         if (device != null && granted) {
-                            _state.value = HostState.Ready(device.toFastbootDevice())
+                            applyDevice(device)
                         } else {
                             _state.value = HostState.Error("USB permission denied")
                         }
@@ -114,16 +116,21 @@ class UsbFastbootManager(private val context: Context) {
         }
         try {
             val devices = mgr.deviceList?.values.orEmpty()
-            val candidate = devices.firstOrNull { it.looksLikeFastboot() }
-            if (candidate == null) {
-                _state.value = HostState.NoDevice
+            val fastboot = devices.firstOrNull { it.looksLikeFastboot() }
+            if (fastboot != null) {
+                if (mgr.hasPermission(fastboot)) {
+                    _state.value = HostState.Ready(fastboot.toFastbootDevice())
+                } else {
+                    requestPermission(fastboot)
+                }
                 return
             }
-            if (mgr.hasPermission(candidate)) {
-                _state.value = HostState.Ready(candidate.toFastbootDevice())
-            } else {
-                requestPermission(candidate)
+            val adb = devices.firstOrNull { it.isAdbInterface() }
+            if (adb != null) {
+                _state.value = HostState.AdbOnly(adb.toFastbootDevice())
+                return
             }
+            _state.value = HostState.NoDevice
         } catch (e: Exception) {
             Log.e(tag, "scan failed", e)
             _state.value = HostState.NoDevice
@@ -132,11 +139,26 @@ class UsbFastbootManager(private val context: Context) {
 
     private fun onDeviceAttached(device: UsbDevice) {
         val mgr = usbManager ?: return
-        if (!device.looksLikeFastboot()) return
-        if (mgr.hasPermission(device)) {
-            _state.value = HostState.Ready(device.toFastbootDevice())
-        } else {
-            requestPermission(device)
+        when {
+            device.looksLikeFastboot() -> {
+                if (mgr.hasPermission(device)) {
+                    _state.value = HostState.Ready(device.toFastbootDevice())
+                } else {
+                    requestPermission(device)
+                }
+            }
+            device.isAdbInterface() -> {
+                _state.value = HostState.AdbOnly(device.toFastbootDevice())
+            }
+            else -> scanConnectedDevices()
+        }
+    }
+
+    private fun applyDevice(device: UsbDevice) {
+        when {
+            device.looksLikeFastboot() -> _state.value = HostState.Ready(device.toFastbootDevice())
+            device.isAdbInterface() -> _state.value = HostState.AdbOnly(device.toFastbootDevice())
+            else -> scanConnectedDevices()
         }
     }
 
@@ -165,7 +187,6 @@ class UsbFastbootManager(private val context: Context) {
         scanConnectedDevices()
     }
 
-    /** Run arbitrary fastboot args, e.g. devices / getvar all / reboot */
     suspend fun runFastboot(vararg args: String): Result<String> {
         return try {
             setBusy(args.joinToString(" ").ifBlank { "fastboot" })
@@ -208,7 +229,23 @@ class UsbFastbootManager(private val context: Context) {
     suspend fun reboot(): Result<String> = runFastboot("reboot")
 }
 
+/** ADB interface: class 0xFF, subclass 0x42. */
+private fun UsbDevice.isAdbInterface(): Boolean {
+    try {
+        for (i in 0 until interfaceCount) {
+            val intf = getInterface(i)
+            if (intf.interfaceClass == 0xFF && intf.interfaceSubclass == 0x42) return true
+        }
+    } catch (_: Exception) {
+    }
+    return false
+}
+
 private fun UsbDevice.looksLikeFastboot(): Boolean {
+    if (isAdbInterface()) return false
+    val product = try { productName?.lowercase().orEmpty() } catch (_: Exception) { "" }
+    if (product.contains("fastboot")) return true
+    // Google vendor — non-ADB usually fastboot / bootloader
     if (vendorId == 0x18D1) return true
     try {
         for (i in 0 until interfaceCount) {
@@ -217,7 +254,7 @@ private fun UsbDevice.looksLikeFastboot(): Boolean {
         }
     } catch (_: Exception) {
     }
-    return true
+    return false
 }
 
 private fun UsbDevice.toFastbootDevice() = FastbootDevice(
