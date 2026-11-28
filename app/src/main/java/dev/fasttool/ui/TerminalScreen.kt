@@ -1,7 +1,14 @@
 package dev.fasttool.ui
 
 import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -12,9 +19,8 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.FlashOn
+import androidx.compose.material.icons.filled.Monitor
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -28,10 +34,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.fasttool.RunMethod
+import dev.fasttool.SetupPrefs
 import dev.fasttool.fastboot.HostState
 import dev.fasttool.fastboot.UsbFastbootManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.io.File
 
 data class TerminalLine(
     val text: String,
@@ -42,44 +51,73 @@ enum class LineType {
     System, Command, Output, Error, Success
 }
 
+enum class SetupPhase {
+    Idle, Method, Directory, Warning, Done
+}
+
 @Composable
 fun TerminalScreen() {
     val context = LocalContext.current
+    val setupPrefs = remember { SetupPrefs(context) }
     val usbManager = remember { UsbFastbootManager(context) }
     val hostState by usbManager.state.collectAsState()
 
-    var lines by remember {
-        mutableStateOf(
-            listOf(
-                TerminalLine("Session idle — waiting for a command", LineType.System)
-            )
-        )
-    }
+    var lines by remember { mutableStateOf(listOf<TerminalLine>()) }
     var input by remember { mutableStateOf("") }
     var showTemplates by remember { mutableStateOf(false) }
     var showFlash by remember { mutableStateOf(false) }
+    var setupPhase by remember {
+        mutableStateOf(if (setupPrefs.completed) SetupPhase.Done else SetupPhase.Idle)
+    }
+    var setupVisible by remember { mutableStateOf(false) }
+    var selectedMethod by remember { mutableStateOf(setupPrefs.method) }
+    var workDir by remember { mutableStateOf(setupPrefs.workDir) }
+
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
-
     val isBusy = hostState is HostState.Busy
 
     fun append(text: String, type: LineType = LineType.Output) {
         lines = lines + TerminalLine(text, type)
     }
 
-    val statusText = when (val s = hostState) {
-        is HostState.NoDevice -> "OTG host · no device"
-        is HostState.PermissionNeeded -> "OTG host · permission needed"
-        is HostState.Ready -> "OTG host · ready"
-        is HostState.Busy -> "OTG host · ${s.message}"
-        is HostState.Error -> "OTG host · error"
+    fun hasSu(): Boolean {
+        val paths = listOf("/system/bin/su", "/system/xbin/su", "/sbin/su", "/su/bin/su")
+        return paths.any { File(it).exists() }
     }
 
-    val statusColor = when (hostState) {
-        is HostState.Ready -> Color(0xFF4ADE80)
-        is HostState.Busy -> Color(0xFFFACC15)
-        is HostState.Error, is HostState.PermissionNeeded -> Color(0xFFF87171)
-        else -> Color(0xFF767676)
+    val dirPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            workDir = uri.toString()
+            append("Directory: $workDir", LineType.Success)
+            setupPhase = SetupPhase.Warning
+            setupVisible = true
+        }
+    }
+
+    fun startSetup() {
+        lines = emptyList()
+        append("Setup starting..", LineType.System)
+        setupPhase = SetupPhase.Method
+        setupVisible = true
+        if (hasSu()) {
+            selectedMethod = RunMethod.Root
+            append("Root (su) detected — selected automatically", LineType.Success)
+        }
+    }
+
+    fun finishSetup() {
+        setupPrefs.method = selectedMethod
+        setupPrefs.workDir = workDir
+        setupPrefs.completed = true
+        setupPhase = SetupPhase.Done
+        setupVisible = false
+        append("Setup complete.", LineType.Success)
+        append("Method: ${selectedMethod.name}", LineType.System)
+        if (workDir.isNotBlank()) append("Work dir: $workDir", LineType.System)
+        append("Type help or fastboot devices", LineType.System)
     }
 
     DisposableEffect(Unit) {
@@ -87,11 +125,21 @@ fun TerminalScreen() {
         onDispose { usbManager.stop() }
     }
 
+    LaunchedEffect(Unit) {
+        if (!setupPrefs.completed) {
+            delay(400)
+            startSetup()
+        } else {
+            append("Session idle — waiting for a command", LineType.System)
+            append("Try: fastboot devices", LineType.System)
+        }
+    }
+
     fun runCommand(raw: String) {
         val cmdLine = raw.trim()
         if (cmdLine.isEmpty()) return
 
-        append("$ $cmdLine", LineType.Command)
+        append("~ $ $cmdLine", LineType.Command)
         input = ""
 
         val parts = cmdLine.split(Regex("\\s+"))
@@ -100,68 +148,52 @@ fun TerminalScreen() {
 
         scope.launch {
             when {
+                cmd == "setup" -> startSetup()
                 cmd == "help" -> {
                     append("FastTool commands:", LineType.System)
-                    append("  help / status / devices / clear / version")
+                    append("  help / status / devices / clear / version / setup")
                     append("  fastboot <args>")
                     append("")
-                    append("UI: bolt = Flash partition + image", LineType.System)
-                    append("    download = Templates", LineType.System)
+                    append("Bottom: download = Templates · display = Flash", LineType.System)
                 }
                 cmd == "status" -> {
-                    append("Host status", LineType.System)
                     when (val s = hostState) {
-                        is HostState.NoDevice -> {
-                            append("  State  no device")
-                            append("  Hint   connect device in fastboot over OTG")
-                        }
-                        is HostState.PermissionNeeded -> append("  State  waiting for USB permission")
-                        is HostState.Ready -> {
-                            append("  State  ready")
-                            append("  Device ${s.device.product ?: s.device.deviceName}")
-                            append("  ID     ${s.device.vendorId.toString(16)}:${s.device.productId.toString(16)}")
-                        }
-                        is HostState.Busy -> append("  State  busy — ${s.message}")
-                        is HostState.Error -> append("  State  error — ${s.message}")
+                        is HostState.NoDevice -> append("OTG host · no device")
+                        is HostState.PermissionNeeded -> append("OTG host · permission needed")
+                        is HostState.Ready -> append("OTG host · ready (${s.device.product ?: s.device.deviceName})")
+                        is HostState.Busy -> append("OTG host · ${s.message}")
+                        is HostState.Error -> append("OTG host · error — ${s.message}")
                     }
+                    append("Method: ${setupPrefs.method.name}")
+                    if (setupPrefs.workDir.isNotBlank()) append("Work dir: ${setupPrefs.workDir}")
                 }
                 cmd == "devices" || (cmd == "fastboot" && args.firstOrNull() == "devices") -> {
                     val result = usbManager.runFastboot("devices")
                     result.onSuccess { out ->
-                        out.lines().forEach { append(it) }
+                        out.lines().forEach { if (it.isNotBlank()) append(it) }
                         if (out.isBlank()) append("(no devices)")
-                    }.onFailure {
-                        append(it.message ?: "failed", LineType.Error)
-                    }
+                    }.onFailure { append(it.message ?: "failed", LineType.Error) }
                 }
                 cmd == "clear" -> {
                     lines = listOf(TerminalLine("Session cleared", LineType.System))
                 }
                 cmd == "version" -> {
-                    append("FastTool 0.1.0")
+                    append("FastTool 0.2.0")
                     append("https://github.com/Classity-Real/FastTool")
                 }
                 cmd == "fastboot" -> {
                     val result = usbManager.runFastboot(*args.toTypedArray())
                     result.onSuccess { out ->
-                        out.lines().forEach { line ->
-                            if (line.isNotBlank()) append(line)
-                        }
+                        out.lines().forEach { if (it.isNotBlank()) append(it) }
                         if (out.isBlank()) append("OK", LineType.Success)
-                    }.onFailure {
-                        append(it.message ?: "fastboot failed", LineType.Error)
-                    }
+                    }.onFailure { append(it.message ?: "fastboot failed", LineType.Error) }
                 }
                 cmd in listOf("getvar", "reboot", "flash", "erase", "oem", "continue", "boot") -> {
                     val result = usbManager.runFastboot(cmd, *args.toTypedArray())
                     result.onSuccess { out ->
-                        out.lines().forEach { line ->
-                            if (line.isNotBlank()) append(line)
-                        }
+                        out.lines().forEach { if (it.isNotBlank()) append(it) }
                         if (out.isBlank()) append("OK", LineType.Success)
-                    }.onFailure {
-                        append(it.message ?: "failed", LineType.Error)
-                    }
+                    }.onFailure { append(it.message ?: "failed", LineType.Error) }
                 }
                 else -> {
                     append("Unknown command: $cmd", LineType.Error)
@@ -202,155 +234,137 @@ fun TerminalScreen() {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF121212))
+            .background(Color(0xFF0A0A0A))
             .statusBarsPadding()
             .imePadding()
     ) {
-        Row(
+        // Top title — not overlapped by terminal
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 20.dp, end = 20.dp, top = 28.dp, bottom = 16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Top
+                .padding(start = 24.dp, end = 24.dp, top = 20.dp, bottom = 12.dp)
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(
-                    text = "FastTool",
-                    fontSize = 25.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = (-0.5).sp,
-                    color = Color(0xFFECECEC),
-                    lineHeight = 25.sp
-                )
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(7.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(7.dp)
-                            .background(color = statusColor, shape = CircleShape)
-                    )
-                    Text(
-                        text = statusText,
-                        fontSize = 12.5.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = Color(0xFF767676),
-                        letterSpacing = 0.2.sp
-                    )
-                }
-            }
-
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Surface(
-                    onClick = { showFlash = true },
-                    shape = CircleShape,
-                    color = Color(0xFF1E1E1E),
-                    modifier = Modifier.size(52.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Default.FlashOn,
-                            contentDescription = "Flash",
-                            tint = Color(0xFFECECEC),
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                }
-                Surface(
-                    onClick = { showTemplates = true },
-                    shape = CircleShape,
-                    color = Color(0xFF1E1E1E),
-                    modifier = Modifier.size(52.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Default.Download,
-                            contentDescription = "Templates",
-                            tint = Color(0xFFECECEC),
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                }
-            }
+            Text(
+                text = "FastTool",
+                fontSize = 34.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFFF5F5F5),
+                letterSpacing = (-0.8).sp
+            )
+            Text(
+                text = "\"Fastboot Tool made for Android :)\"",
+                fontSize = 13.sp,
+                color = Color(0xFF5A5A5A),
+                modifier = Modifier.padding(top = 4.dp)
+            )
         }
 
-        Surface(
+        // Full terminal output (below title)
+        Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 16.dp),
-            shape = RoundedCornerShape(28.dp),
-            color = Color(0xFF161616)
+                .padding(horizontal = 12.dp)
+                .background(Color(0xFF101010), RoundedCornerShape(24.dp))
         ) {
             LazyColumn(
                 state = listState,
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(22.dp),
+                    .padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 items(lines) { line ->
                     val color = when (line.type) {
-                        LineType.System -> Color(0xFF5C5C5C)
+                        LineType.System -> Color(0xFF6A6A6A)
                         LineType.Command -> Color(0xFFECECEC)
                         LineType.Output -> Color(0xFFB0B0B0)
                         LineType.Error -> Color(0xFFF87171)
                         LineType.Success -> Color(0xFF4ADE80)
                     }
-                    val size = if (line.type == LineType.System) 12.sp else 13.sp
-
                     Text(
                         text = line.text,
                         color = color,
-                        fontSize = size,
+                        fontSize = 13.sp,
                         fontFamily = FontFamily.Monospace,
-                        lineHeight = (size.value * 1.7f).sp
+                        lineHeight = 22.sp
                     )
                 }
+            }
 
-                item {
-                    if (!isBusy) {
-                        Row {
-                            Text(
-                                text = "$ ",
-                                color = Color(0xFFECECEC),
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 13.sp
-                            )
-                            Text(
-                                text = "_",
-                                color = Color(0xFF4A4A4A),
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 13.sp
-                            )
+            // Setup overlay with fade
+            AnimatedVisibility(
+                visible = setupVisible && setupPhase != SetupPhase.Done && setupPhase != SetupPhase.Idle,
+                enter = fadeIn(tween(450)),
+                exit = fadeOut(tween(300)),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                SetupOverlay(
+                    phase = setupPhase,
+                    selectedMethod = selectedMethod,
+                    workDir = workDir,
+                    onSelectMethod = { method ->
+                        selectedMethod = method
+                        append("Method: ${method.name}", LineType.Success)
+                        setupPhase = SetupPhase.Directory
+                    },
+                    onPickDirectory = { dirPicker.launch(null) },
+                    onWorkDirTyped = { workDir = it },
+                    onContinueDirectory = {
+                        if (workDir.isNotBlank()) {
+                            append("Directory: $workDir", LineType.Success)
+                            setupPhase = SetupPhase.Warning
                         }
+                    },
+                    onAcceptWarning = { finishSetup() },
+                    onDeclineWarning = {
+                        append("Setup cancelled.", LineType.System)
+                        setupPhase = SetupPhase.Idle
+                        setupVisible = false
                     }
-                }
+                )
             }
         }
 
+        // Bottom bar: Template · input · Flash
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
-                .padding(start = 20.dp, end = 20.dp, bottom = 16.dp),
+                .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            // Templates
             Surface(
-                shape = RoundedCornerShape(26.dp),
+                onClick = { showTemplates = true },
+                shape = CircleShape,
+                color = Color(0xFF1C1C1C),
+                modifier = Modifier.size(48.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Default.Download,
+                        contentDescription = "Templates",
+                        tint = Color(0xFFE8E8E8),
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
+
+            // Command field
+            Surface(
+                shape = RoundedCornerShape(28.dp),
                 color = Color(0xFF1A1A1A),
                 modifier = Modifier
                     .weight(1f)
-                    .height(52.dp)
+                    .height(48.dp)
             ) {
                 Box(
                     contentAlignment = Alignment.CenterStart,
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(horizontal = 20.dp)
+                        .padding(horizontal = 18.dp)
                 ) {
                     BasicTextField(
                         value = input,
@@ -364,14 +378,12 @@ fun TerminalScreen() {
                         ),
                         cursorBrush = SolidColor(Color(0xFFECECEC)),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
-                        keyboardActions = KeyboardActions(
-                            onGo = { runCommand(input) }
-                        ),
+                        keyboardActions = KeyboardActions(onGo = { runCommand(input) }),
                         modifier = Modifier.fillMaxWidth(),
                         decorationBox = { inner ->
                             if (input.isEmpty()) {
                                 Text(
-                                    text = "Type a command…",
+                                    text = "~ $",
                                     color = Color(0xFF555555),
                                     fontSize = 14.sp,
                                     fontFamily = FontFamily.Monospace
@@ -383,18 +395,18 @@ fun TerminalScreen() {
                 }
             }
 
+            // Flash
             Surface(
-                onClick = { if (!isBusy) runCommand(input) },
-                enabled = !isBusy,
+                onClick = { showFlash = true },
                 shape = CircleShape,
-                color = Color(0xFFE4E4E4),
-                modifier = Modifier.size(52.dp)
+                color = Color(0xFF1C1C1C),
+                modifier = Modifier.size(48.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                        contentDescription = "Run command",
-                        tint = Color(0xFF161616),
+                        imageVector = Icons.Default.Monitor,
+                        contentDescription = "Flash",
+                        tint = Color(0xFFE8E8E8),
                         modifier = Modifier.size(22.dp)
                     )
                 }
@@ -408,18 +420,146 @@ fun TerminalScreen() {
             onFlash = { part, uri -> onSingleFlash(part, uri) }
         )
     }
-
     if (showTemplates) {
         TemplatesSheet(
             onDismiss = { showTemplates = false },
             onFlash = { template, images -> onTemplateFlash(template, images) }
         )
     }
+}
 
-    LaunchedEffect(Unit) {
-        delay(1200)
-        if (lines.size == 1) {
-            append("Try: fastboot devices", LineType.System)
+@Composable
+private fun SetupOverlay(
+    phase: SetupPhase,
+    selectedMethod: RunMethod,
+    workDir: String,
+    onSelectMethod: (RunMethod) -> Unit,
+    onPickDirectory: () -> Unit,
+    onWorkDirTyped: (String) -> Unit,
+    onContinueDirectory: () -> Unit,
+    onAcceptWarning: () -> Unit,
+    onDeclineWarning: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xEE0A0A0A))
+            .padding(24.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            when (phase) {
+                SetupPhase.Method -> {
+                    Text(
+                        "Which method are you using?",
+                        color = Color(0xFFECECEC),
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    SetupChoice(
+                        title = "Root",
+                        subtitle = "Uses su when available",
+                        selected = selectedMethod == RunMethod.Root,
+                        onClick = { onSelectMethod(RunMethod.Root) }
+                    )
+                    SetupChoice(
+                        title = "Normal",
+                        subtitle = "No root — OTG host only",
+                        selected = selectedMethod == RunMethod.Normal,
+                        onClick = { onSelectMethod(RunMethod.Normal) }
+                    )
+                }
+                SetupPhase.Directory -> {
+                    Text(
+                        "Select a directory for backup / restore",
+                        color = Color(0xFFECECEC),
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    OutlinedTextField(
+                        value = workDir,
+                        onValueChange = onWorkDirTyped,
+                        placeholder = { Text("Path or pick a folder", color = Color(0xFF666666)) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color(0xFFECECEC),
+                            unfocusedTextColor = Color(0xFFECECEC),
+                            focusedBorderColor = Color(0xFF4ADE80),
+                            unfocusedBorderColor = Color(0xFF333333),
+                            cursorColor = Color(0xFFECECEC)
+                        )
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        TextButton(onClick = onPickDirectory) {
+                            Text("Browse", color = Color(0xFF4ADE80))
+                        }
+                        Button(
+                            onClick = onContinueDirectory,
+                            enabled = workDir.isNotBlank(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFFE4E4E4),
+                                contentColor = Color(0xFF121212)
+                            )
+                        ) {
+                            Text("Continue")
+                        }
+                    }
+                }
+                SetupPhase.Warning -> {
+                    Text(
+                        "Warning",
+                        color = Color(0xFFF87171),
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        "By continuing you agree that FastTool can potentially brick your device " +
+                            "through your actions. The owner has nothing to do with any damage caused.",
+                        color = Color(0xFFB0B0B0),
+                        fontSize = 14.sp,
+                        lineHeight = 20.sp
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        TextButton(onClick = onDeclineWarning) {
+                            Text("Cancel", color = Color(0xFF888888))
+                        }
+                        Button(
+                            onClick = onAcceptWarning,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFFE4E4E4),
+                                contentColor = Color(0xFF121212)
+                            )
+                        ) {
+                            Text("I understand")
+                        }
+                    }
+                }
+                else -> {}
+            }
+        }
+    }
+}
+
+@Composable
+private fun SetupChoice(
+    title: String,
+    subtitle: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(16.dp),
+        color = if (selected) Color(0xFF1E2A1E) else Color(0xFF1A1A1A),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Text(title, color = Color(0xFFECECEC), fontWeight = FontWeight.Medium)
+            Text(subtitle, color = Color(0xFF767676), fontSize = 12.sp)
         }
     }
 }
